@@ -1,0 +1,229 @@
+import React, { Component } from "react";
+import { BACKEND_URL } from "../../constants";
+import { getGuid } from "../../util";
+
+import ReactJson from "react-json-view";
+import { Position, Toaster, Intent } from "@blueprintjs/core";
+
+import ServiceSelect from "./ServiceSelect";
+import AttributeFilter from "./AttributeFilter";
+import AddFilterButton from "./AddFilterButton";
+import FetchDataButton from "./FetchDataButton";
+import { GCP_CONFIG, GCP_SERVICES } from "./gcpConfig";
+
+class GCPServices extends Component {
+	constructor(props) {
+		super(props);
+
+		this.state = {
+			services: [],
+			selectedService: undefined,
+			content: undefined,
+			filters: [],
+			toasts: [],
+		};
+
+		this.toaster = React.createRef();
+	}
+
+	componentWillMount = () => {
+		fetch(BACKEND_URL + "/services").then((response) => {
+			response.json().then((data) => {
+				this.setState({ services: data });
+			});
+		});
+	};
+
+	componentDidMount() {
+		fetch(BACKEND_URL + "/services").then((response) => {
+			response.json().then((data) => {
+				this.setState({ services: data });
+			});
+		});
+	}
+
+	handleAddFilter = () => {
+		this.setState({
+			filters: this.state.filters.concat({
+				filterId: getGuid(),
+			}),
+		});
+	};
+
+	handleFilterChange = (filter) => {
+		this.setState({
+			filters: this.state.filters.map((f) =>
+				f.filterId === filter.filterId ? filter : f
+			),
+		});
+	};
+
+	handleFilterDelete = (filter) => {
+		this.setState({
+			filters: this.state.filters.filter(
+				(f) => f.filterId !== filter.filterId
+			),
+		});
+	};
+
+	handleFetchData = () => {
+		let query = this.state.filters.reduce(
+			(acc, f) =>
+				(acc === "" ? "?" : acc + "&") + f.attribute + "=" + f.value,
+			""
+		);
+
+		fetch(
+			BACKEND_URL +
+				"/services/" +
+				this.state.selectedService.ServiceCode +
+				"/products" +
+				query
+		).then((response) => {
+			response.json().then((data) => {
+				this.setState({ content: data, productContent: true });
+				this.handleToast(
+					"Fetched " +
+						data.length +
+						" products for " +
+						this.state.selectedService.ServiceCode
+				);
+			});
+		});
+	};
+
+	handleServiceSelect = (service) => {
+		this.setState(
+			{
+				selectedService: this.state.services.find(
+					(s) => s.ServiceCode === service
+				),
+				filters: [],
+			},
+			() => {
+				fetch(BACKEND_URL + "/services/" + service).then((response) => {
+					response.json().then((data) => {
+						const updated = data.Services[0];
+						updated.ServiceCode = updated.ServiceCode.replace(
+							"Amazon",
+							"GCP"
+						)
+							.replace("AWS", "GCP")
+							.replace("AlexaTopSites", "Google Bot");
+						this.setState({ content: updated });
+						this.handleToast(
+							"Fetched attributes for service " +
+								updated.ServiceCode
+						);
+					});
+				});
+			}
+		);
+	};
+
+	handleServiceClear = () => {
+		this.setState({
+			selectedService: undefined,
+			filters: [],
+			content: undefined,
+		});
+	};
+
+	handleToast = (message) => {
+		this.toaster.current.show({
+			message: message,
+			intent: Intent.SUCCESS,
+		});
+	};
+
+	render() {
+		let attributes = this.state.selectedService
+			? this.state.selectedService.AttributeNames
+			: [];
+
+		return (
+			<div className={"pt-dark"}>
+				<ServiceSelect
+					serviceProd="Google Cloud Platform"
+					services={this.state.services}
+					onChange={this.handleServiceSelect}
+					onClear={this.handleServiceClear}
+				/>
+				{!this.state.selectedService ? (
+					""
+				) : (
+					<div>
+						{this.state.filters.map((f) => (
+							<AttributeFilter
+								key={f.filterId}
+								filterId={f.filterId}
+								service={this.state.selectedService}
+								attributes={attributes}
+								onChange={this.handleFilterChange}
+								onDelete={() => this.handleFilterDelete(f)}
+							/>
+						))}
+						<AddFilterButton onClick={this.handleAddFilter} />
+						<FetchDataButton onClick={this.handleFetchData} />
+						<Toaster
+							ref={this.toaster}
+							position={Position.BOTTOM_RIGHT}
+						/>
+					</div>
+				)}
+				{this.state.productContent ? (
+					<pre className={"pre-wrapper"}>
+						<ReactJson
+							src={GCP_CONFIG}
+							theme={"colors"}
+							collapsed={4}
+							onEdit={false}
+							onDelete={false}
+							onAdd={false}
+							displayDataTypes={false}
+							enableClipboard={false}
+							displayObjectSize={false}
+							style={{ background: "#222e36" }}
+						/>
+					</pre>
+				) : null}
+				<pre className={"pre-wrapper"}>
+					{!this.state.content ? (
+						"Select a service."
+					) : (
+						<ReactJson
+							src={this.state.content}
+							theme={"colors"}
+							collapsed={4}
+							onEdit={false}
+							onDelete={false}
+							onAdd={false}
+							displayDataTypes={false}
+							enableClipboard={false}
+							displayObjectSize={false}
+							style={{ background: "#222e36" }}
+						/>
+					)}
+				</pre>
+
+				<pre className={"pre-wrapper"}>
+					All services
+					<ReactJson
+						src={GCP_SERVICES}
+						theme={"colors"}
+						collapsed={4}
+						onEdit={false}
+						onDelete={false}
+						onAdd={false}
+						displayDataTypes={false}
+						enableClipboard={false}
+						displayObjectSize={false}
+						style={{ background: "#222e36" }}
+					/>
+				</pre>
+			</div>
+		);
+	}
+}
+
+export default GCPServices;
